@@ -1247,14 +1247,16 @@
             }
             
             // 돌
-            for (let y = 0; y < boardSize; y++) {
-                for (let x = 0; x < boardSize; x++) {
-                    if (board[y][x] !== 0) drawStone(x, y, board[y][x]);
+            if (board && board.length > 0) {
+                for (let y = 0; y < boardSize; y++) {
+                    for (let x = 0; x < boardSize; x++) {
+                        if (board[y] && board[y][x] !== 0) drawStone(x, y, board[y][x]);
+                    }
                 }
             }
             
             // 마지막 수 표시
-            if (lastMove) {
+            if (lastMove && board && board.length > 0) {
                 const px = margin + lastMove.x * cellSize;
                 const py = margin + lastMove.y * cellSize;
                 ctx.beginPath();
