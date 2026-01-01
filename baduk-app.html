@@ -818,6 +818,7 @@
         // ========================================
         let boardSize = 19;
         let board = [];
+        let boardInitialized = false;
         let currentPlayer = 1;
         let playerColor = 1;
         let currentAIRank = 18;
@@ -1201,6 +1202,20 @@
             
             ctx.fillStyle = '#E8B86D';
             ctx.fillRect(0, 0, size, size);
+            
+            // board가 초기화되지 않았으면 바둑판만 그리고 리턴
+            if (!board || board.length === 0) {
+                // 선만 그리기
+                ctx.strokeStyle = '#2C1810';
+                ctx.lineWidth = 1;
+                
+                for (let i = 0; i < boardSize; i++) {
+                    const pos = margin + i * cellSize;
+                    ctx.beginPath(); ctx.moveTo(margin, pos); ctx.lineTo(size - margin, pos); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(pos, margin); ctx.lineTo(pos, size - margin); ctx.stroke();
+                }
+                return;
+            }
             
             ctx.strokeStyle = '#2C1810';
             ctx.lineWidth = 1;
