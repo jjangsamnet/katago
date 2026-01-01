@@ -1215,15 +1215,23 @@
             isAIThinking = false;
             
             document.getElementById('currentRank').textContent = `${rank}급`;
-            document.getElementById('aiRankDisplay').textContent = `${rank}급`;
             document.getElementById('blackCaptures').textContent = '0';
             document.getElementById('whiteCaptures').textContent = '0';
             document.getElementById('gameStatus').textContent = '대국 중';
             
-            const blackName = playerColor === 1 ? '나' : `AI ${rank}급`;
-            const whiteName = playerColor === 2 ? '나' : `AI ${rank}급`;
-            document.querySelector('#blackPlayer .player-name').textContent = blackName;
-            document.querySelector('#whitePlayer .player-name').textContent = whiteName;
+            // 플레이어 이름 설정
+            const blackPlayerName = document.querySelector('#blackPlayer .player-name');
+            const whitePlayerName = document.querySelector('#whitePlayer .player-name');
+            
+            if (playerColor === 1) {
+                // 내가 흑
+                blackPlayerName.innerHTML = '나';
+                whitePlayerName.innerHTML = `AI <span id="aiRankDisplay">${rank}급</span>`;
+            } else {
+                // 내가 백
+                blackPlayerName.innerHTML = `AI <span id="aiRankDisplay">${rank}급</span>`;
+                whitePlayerName.innerHTML = '나';
+            }
             
             showScreen('gameScreen');
             resizeCanvas();
