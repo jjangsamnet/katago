@@ -931,7 +931,10 @@
                             board_size: boardSize,
                             moves: moveStrings,
                             komi: settings.komi,
-                            max_visits: getVisitsForRank(currentAIRank)
+                            max_visits: getVisitsForRank(currentAIRank),
+                            rank: currentAIRank,
+                            mistake_rate: getMistakeRate(currentAIRank),
+                            random_rate: getRandomMoveRate(currentAIRank)
                         })
                     });
 
@@ -967,7 +970,29 @@
         }
 
         function getVisitsForRank(rank) {
-            return Math.floor(10 + 90 * ((19 - rank) / 18));
+            // 급수별 탐색 횟수 설정
+            // 1급: 500회 (강함), 18급: 5회 (약함)
+            const visits = {
+                1: 500, 2: 400, 3: 300,
+                4: 200, 5: 150, 6: 100,
+                7: 80, 8: 60, 9: 50,
+                10: 40, 11: 30, 12: 25,
+                13: 20, 14: 15, 15: 12,
+                16: 10, 17: 7, 18: 5
+            };
+            return visits[rank] || 50;
+        }
+
+        // 급수별 실수 확률 (높을수록 실수 많이 함)
+        function getMistakeRate(rank) {
+            // 1급: 5% 실수, 18급: 60% 실수
+            return 0.05 + (rank - 1) * 0.032;
+        }
+
+        // 급수별 랜덤 착수 확률
+        function getRandomMoveRate(rank) {
+            // 1급: 0% 랜덤, 18급: 40% 랜덤
+            return Math.max(0, (rank - 1) * 0.024);
         }
 
         // ========================================
@@ -1008,12 +1033,26 @@
             if (candidates.length === 0) return null;
 
             candidates.sort((a, b) => b.score - a.score);
-            const skillFactor = (19 - currentAIRank) / 18;
-            const topN = Math.max(1, Math.floor(candidates.length * (1 - skillFactor * 0.7)));
             
-            return Math.random() < skillFactor * 0.7 
-                ? candidates[0] 
-                : candidates[Math.floor(Math.random() * Math.min(topN, candidates.length))];
+            // 급수별 AI 실력 조정
+            const mistakeRate = getMistakeRate(currentAIRank);
+            const randomRate = getRandomMoveRate(currentAIRank);
+            
+            // 랜덤 착수 (급수 낮을수록 확률 높음)
+            if (Math.random() < randomRate) {
+                return candidates[Math.floor(Math.random() * candidates.length)];
+            }
+            
+            // 실수 (좋은 수 대신 중간~하위 수 선택)
+            if (Math.random() < mistakeRate && candidates.length > 3) {
+                const midStart = Math.floor(candidates.length * 0.3);
+                const midEnd = Math.floor(candidates.length * 0.7);
+                return candidates[midStart + Math.floor(Math.random() * (midEnd - midStart))];
+            }
+            
+            // 상위 수 중에서 선택 (급수에 따라 범위 조절)
+            const topRange = Math.max(1, Math.floor(1 + (currentAIRank - 1) * 0.3));
+            return candidates[Math.floor(Math.random() * Math.min(topRange, candidates.length))];
         }
 
         function evaluateMove(x, y, color) {
