@@ -258,6 +258,7 @@
             opacity: 0.7;
         }
 
+        .rank-btn.pro { background: linear-gradient(135deg, #FFD700, #B8860B); color: #1a1a1a; }
         .rank-btn.dan { background: linear-gradient(135deg, #8B2635, #6B1625); color: var(--text-light); }
         .rank-btn.high { background: linear-gradient(135deg, #1E5631, #0E3621); color: var(--text-light); }
         .rank-btn.mid { background: linear-gradient(135deg, #1E3A5F, #0E2A4F); color: var(--text-light); }
@@ -669,7 +670,7 @@
                 <h2 class="screen-title">AI 급수 선택</h2>
             </div>
             <div class="rank-info">
-                <p>🤖 급수가 낮을수록 AI가 더 강합니다.<br>18급(초보) → 1급(고급)</p>
+                <p>🤖 9단(최강) → 1단 → 1급 → 18급(초보)<br>단이 높을수록, 급이 낮을수록 AI가 강합니다.</p>
             </div>
             <div class="rank-grid" id="rankGrid"></div>
         </div>
@@ -969,30 +970,60 @@
             return null;
         }
 
+        // 단/급 문자열 변환
+        function getRankString(rank) {
+            if (rank < 0) {
+                return `${-rank}단`;  // 음수는 단
+            } else {
+                return `${rank}급`;   // 양수는 급
+            }
+        }
+
         function getVisitsForRank(rank) {
-            // 급수별 탐색 횟수 설정
-            // 1급: 500회 (강함), 18급: 5회 (약함)
-            const visits = {
-                1: 500, 2: 400, 3: 300,
-                4: 200, 5: 150, 6: 100,
-                7: 80, 8: 60, 9: 50,
-                10: 40, 11: 30, 12: 25,
-                13: 20, 14: 15, 15: 12,
-                16: 10, 17: 7, 18: 5
-            };
-            return visits[rank] || 50;
+            // 단/급별 탐색 횟수 설정
+            // 9단: 5000회 (최강), 1단: 1000회, 1급: 500회, 18급: 5회 (약함)
+            if (rank < 0) {
+                // 단 (음수): -9 ~ -1
+                const danVisits = {
+                    '-9': 5000, '-8': 4000, '-7': 3000,
+                    '-6': 2500, '-5': 2000, '-4': 1500,
+                    '-3': 1200, '-2': 1000, '-1': 800
+                };
+                return danVisits[String(rank)] || 2000;
+            } else {
+                // 급 (양수): 1 ~ 18
+                const visits = {
+                    1: 500, 2: 400, 3: 300,
+                    4: 200, 5: 150, 6: 100,
+                    7: 80, 8: 60, 9: 50,
+                    10: 40, 11: 30, 12: 25,
+                    13: 20, 14: 15, 15: 12,
+                    16: 10, 17: 7, 18: 5
+                };
+                return visits[rank] || 50;
+            }
         }
 
         // 급수별 실수 확률 (높을수록 실수 많이 함)
         function getMistakeRate(rank) {
-            // 1급: 5% 실수, 18급: 60% 실수
-            return 0.05 + (rank - 1) * 0.032;
+            if (rank < 0) {
+                // 단: 거의 실수 안함 (9단: 0%, 1단: 2%)
+                return Math.max(0, 0.02 + (rank + 1) * 0.002);
+            } else {
+                // 급: 1급 5%, 18급 60%
+                return 0.05 + (rank - 1) * 0.032;
+            }
         }
 
         // 급수별 랜덤 착수 확률
         function getRandomMoveRate(rank) {
-            // 1급: 0% 랜덤, 18급: 40% 랜덤
-            return Math.max(0, (rank - 1) * 0.024);
+            if (rank < 0) {
+                // 단: 랜덤 없음
+                return 0;
+            } else {
+                // 급: 1급 0%, 18급 40%
+                return Math.max(0, (rank - 1) * 0.024);
+            }
         }
 
         // ========================================
@@ -1146,6 +1177,16 @@
             const grid = document.getElementById('rankGrid');
             grid.innerHTML = '';
             
+            // 9단~1단 (프로급)
+            for (let dan = 9; dan >= 1; dan--) {
+                const btn = document.createElement('button');
+                btn.className = 'rank-btn pro';
+                btn.innerHTML = `${dan}단<span class="level">프로급</span>`;
+                btn.onclick = () => startGame(-dan);  // 단은 음수로 표현
+                grid.appendChild(btn);
+            }
+            
+            // 1급~18급
             for (let rank = 1; rank <= 18; rank++) {
                 const btn = document.createElement('button');
                 btn.className = 'rank-btn ' + (rank <= 3 ? 'dan' : rank <= 8 ? 'high' : rank <= 13 ? 'mid' : 'low');
@@ -1214,7 +1255,10 @@
             zoomLevel = 1;
             isAIThinking = false;
             
-            document.getElementById('currentRank').textContent = `${rank}급`;
+            // 단/급 표시 문자열
+            const rankStr = getRankString(rank);
+            
+            document.getElementById('currentRank').textContent = rankStr;
             document.getElementById('blackCaptures').textContent = '0';
             document.getElementById('whiteCaptures').textContent = '0';
             document.getElementById('gameStatus').textContent = '대국 중';
@@ -1226,10 +1270,10 @@
             if (playerColor === 1) {
                 // 내가 흑
                 blackPlayerName.innerHTML = '나';
-                whitePlayerName.innerHTML = `AI <span id="aiRankDisplay">${rank}급</span>`;
+                whitePlayerName.innerHTML = `AI <span id="aiRankDisplay">${rankStr}</span>`;
             } else {
                 // 내가 백
-                blackPlayerName.innerHTML = `AI <span id="aiRankDisplay">${rank}급</span>`;
+                blackPlayerName.innerHTML = `AI <span id="aiRankDisplay">${rankStr}</span>`;
                 whitePlayerName.innerHTML = '나';
             }
             
@@ -1562,16 +1606,22 @@
 
         // 급수별 기권 기준 (음수값 - AI가 몇 집 뒤처지면 기권)
         function getResignThreshold(rank) {
-            // 1급: -15집 이상 지면 기권 (쉽게 기권 안함)
-            // 18급: -30집 이상 지면 기권 (더 빨리 기권)
-            const baseThreshold = -30;
-            const adjustment = (18 - rank) * 1; // 급수 높을수록 덜 기권
-            return baseThreshold + adjustment;
+            if (rank < 0) {
+                // 단: 많이 지고 있어도 쉽게 기권 안함
+                // 9단: -50집, 1단: -25집
+                return -50 + (rank + 9) * 3;
+            } else {
+                // 급: 1급 -15집, 18급 -30집
+                const baseThreshold = -30;
+                const adjustment = (18 - rank) * 1;
+                return baseThreshold + adjustment;
+            }
         }
 
         // AI 기권 처리
         function aiResign(scoreDiff) {
             gameEnded = true;
+            const rankStr = getRankString(currentAIRank);
             const winner = playerColor === 1 ? '흑 (나)' : '백 (나)';
             const diff = Math.abs(Math.round(scoreDiff));
             showGameOverModal(true, `${winner} 승리!\nAI가 약 ${diff}집 차이로 기권했습니다.`);
