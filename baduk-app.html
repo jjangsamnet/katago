@@ -810,7 +810,7 @@
         // ========================================
         // 서버 설정
         // ========================================
-        let serverUrl = localStorage.getItem('katagoServerUrl') || '';
+        let serverUrl = 'https://katago-v2if.onrender.com';  // 고정 서버 주소
         let serverOnline = false;
 
         // ========================================
@@ -841,31 +841,17 @@
             initCanvas();
             loadSettings();
             
-            // 저장된 서버 URL 로드
+            // 서버 URL 표시
             document.getElementById('serverUrlInput').value = serverUrl;
-            if (serverUrl) {
-                testServerConnection();
-            } else {
-                updateServerStatus(false, '서버 URL 미설정 - 로컬 AI 사용');
-            }
+            
+            // 자동으로 서버 연결 테스트
+            testServerConnection();
         });
 
         // ========================================
         // 서버 연결 테스트
         // ========================================
         async function testServerConnection() {
-            const urlInput = document.getElementById('serverUrlInput');
-            const url = urlInput.value.trim();
-            
-            if (!url) {
-                updateServerStatus(false, 'URL을 입력하세요');
-                return;
-            }
-
-            // URL 정규화
-            serverUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-            localStorage.setItem('katagoServerUrl', serverUrl);
-
             updateServerStatus('checking', '연결 테스트 중...');
 
             try {
@@ -1400,6 +1386,21 @@
             
             try {
                 const aiColor = playerColor === 1 ? 2 : 1;
+                
+                // 형세 판단 - AI가 불리하면 기권 검토
+                const evaluation = evaluatePosition(aiColor);
+                
+                // AI가 많이 불리하면 (급수에 따라 기권 기준 다름)
+                const resignThreshold = getResignThreshold(currentAIRank);
+                
+                if (evaluation.scoreDiff < resignThreshold && moveHistory.length > 30) {
+                    // AI 자동 기권
+                    document.getElementById('thinkingIndicator').classList.remove('active');
+                    isAIThinking = false;
+                    aiResign(evaluation.scoreDiff);
+                    return;
+                }
+                
                 const move = await getAIMove();
                 
                 document.getElementById('thinkingIndicator').classList.remove('active');
@@ -1415,6 +1416,99 @@
                 isAIThinking = false;
                 passMove(true);
             }
+        }
+
+        // ========================================
+        // 형세 판단 함수
+        // ========================================
+        function evaluatePosition(aiColor) {
+            const playerColorValue = playerColor;
+            const aiColorValue = aiColor;
+            
+            // 영역 계산
+            let playerTerritory = 0;
+            let aiTerritory = 0;
+            const visited = new Set();
+            
+            for (let y = 0; y < boardSize; y++) {
+                for (let x = 0; x < boardSize; x++) {
+                    if (board[y][x] === 0 && !visited.has(`${x},${y}`)) {
+                        const { area, owner } = floodFillTerritory(x, y, visited);
+                        if (owner === playerColorValue) playerTerritory += area;
+                        else if (owner === aiColorValue) aiTerritory += area;
+                    }
+                }
+            }
+            
+            // 돌 수 계산
+            let playerStones = 0, aiStones = 0;
+            for (let y = 0; y < boardSize; y++) {
+                for (let x = 0; x < boardSize; x++) {
+                    if (board[y][x] === playerColorValue) playerStones++;
+                    else if (board[y][x] === aiColorValue) aiStones++;
+                }
+            }
+            
+            // 잡은 돌
+            const playerCaptures = playerColor === 1 ? captures.black : captures.white;
+            const aiCaptures = playerColor === 1 ? captures.white : captures.black;
+            
+            // 덤 적용 (백이 받음)
+            const komiBonus = aiColorValue === 2 ? settings.komi : -settings.komi;
+            
+            // AI 관점 점수 차이 (양수면 AI 유리, 음수면 AI 불리)
+            const aiScore = aiTerritory + aiCaptures + komiBonus;
+            const playerScore = playerTerritory + playerCaptures;
+            const scoreDiff = aiScore - playerScore;
+            
+            return {
+                aiScore,
+                playerScore,
+                scoreDiff,
+                aiTerritory,
+                playerTerritory
+            };
+        }
+
+        function floodFillTerritory(startX, startY, visited) {
+            const area = [], borders = new Set(), stack = [[startX, startY]];
+            
+            while (stack.length > 0) {
+                const [x, y] = stack.pop();
+                const key = `${x},${y}`;
+                if (visited.has(key) || x < 0 || x >= boardSize || y < 0 || y >= boardSize) continue;
+                
+                if (board[y][x] !== 0) {
+                    borders.add(board[y][x]);
+                    continue;
+                }
+                
+                visited.add(key);
+                area.push([x, y]);
+                stack.push([x-1,y],[x+1,y],[x,y-1],[x,y+1]);
+            }
+            
+            let owner = 0;
+            if (borders.size === 1) owner = [...borders][0];
+            
+            return { area: area.length, owner };
+        }
+
+        // 급수별 기권 기준 (음수값 - AI가 몇 집 뒤처지면 기권)
+        function getResignThreshold(rank) {
+            // 1급: -15집 이상 지면 기권 (쉽게 기권 안함)
+            // 18급: -30집 이상 지면 기권 (더 빨리 기권)
+            const baseThreshold = -30;
+            const adjustment = (18 - rank) * 1; // 급수 높을수록 덜 기권
+            return baseThreshold + adjustment;
+        }
+
+        // AI 기권 처리
+        function aiResign(scoreDiff) {
+            gameEnded = true;
+            const winner = playerColor === 1 ? '흑 (나)' : '백 (나)';
+            const diff = Math.abs(Math.round(scoreDiff));
+            showGameOverModal(true, `${winner} 승리!\nAI가 약 ${diff}집 차이로 기권했습니다.`);
         }
 
         function updateTurnIndicator() {
@@ -1479,34 +1573,16 @@
         function endGame() {
             gameEnded = true;
             
-            // 간단한 집 계산
+            // 집 계산
             let blackTerritory = 0, whiteTerritory = 0;
             const visited = new Set();
             
             for (let y = 0; y < boardSize; y++) {
                 for (let x = 0; x < boardSize; x++) {
                     if (board[y][x] === 0 && !visited.has(`${x},${y}`)) {
-                        const area = [], borders = new Set(), stack = [[x, y]];
-                        
-                        while (stack.length > 0) {
-                            const [cx, cy] = stack.pop();
-                            const key = `${cx},${cy}`;
-                            if (visited.has(key) || cx < 0 || cx >= boardSize || cy < 0 || cy >= boardSize) continue;
-                            
-                            if (board[cy][cx] !== 0) {
-                                borders.add(board[cy][cx]);
-                                continue;
-                            }
-                            
-                            visited.add(key);
-                            area.push([cx, cy]);
-                            stack.push([cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]);
-                        }
-                        
-                        if (borders.size === 1) {
-                            if (borders.has(1)) blackTerritory += area.length;
-                            else whiteTerritory += area.length;
-                        }
+                        const { area, owner } = floodFillTerritory(x, y, visited);
+                        if (owner === 1) blackTerritory += area;
+                        else if (owner === 2) whiteTerritory += area;
                     }
                 }
             }
